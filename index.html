@@ -1,1 +1,532 @@
-hi
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 챗봇 동작 원리 실습</title>
+    <style>
+        /* --- 글로벌 스타일 --- */
+        :root {
+            --color-step1: #007bff; /* 파랑 */
+            --color-step2: #fd7e14; /* 주황 */
+            --color-step3: #28a745; /* 초록 */
+            --color-step4: #6f42c1; /* 보라 */
+            --color-bg-light: #f7f8fa;
+            --color-border: #dddfe2;
+            --color-text-primary: #1c1e21;
+            --color-text-secondary: #606770;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: var(--color-text-primary);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        /* --- 탭 네비게이션 --- */
+        .tabs {
+            display: flex;
+            background-color: var(--color-bg-light);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            background-color: transparent;
+            cursor: pointer;
+            color: var(--color-text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            background-color: #e9ecef;
+        }
+
+        .tab-button.active {
+            color: var(--active-color, #000);
+            border-bottom-color: var(--active-color, #000);
+        }
+        
+        /* --- 탭 컨텐츠 --- */
+        .tab-content {
+            padding: 32px;
+        }
+
+        .content-pane {
+            display: none;
+        }
+
+        .content-pane.active {
+            display: block;
+        }
+        
+        h1 { font-size: 28px; margin-bottom: 8px; }
+        .description { font-size: 16px; margin-bottom: 24px; padding-left: 12px; }
+
+        #step1 h1, #step1 .tab-button.active { --active-color: var(--color-step1); color: var(--color-step1); }
+        #step2 h1, #step2 .tab-button.active { --active-color: var(--color-step2); color: var(--color-step2); }
+        #step3 h1, #step3 .tab-button.active { --active-color: var(--color-step3); color: var(--color-step3); }
+        #step4 h1, #step4 .tab-button.active { --active-color: var(--color-step4); color: var(--color-step4); }
+        
+        #step1 .description { border-left: 3px solid var(--color-step1); }
+        #step2 .description { border-left: 3px solid var(--color-step2); }
+        #step3 .description { border-left: 3px solid var(--color-step3); }
+        #step4 .description { border-left: 3px solid var(--color-step4); }
+
+        /* --- 공용 컴포넌트 스타일 --- */
+        .section {
+            background-color: var(--color-bg-light);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        h4 { font-size: 20px; color: #333; margin-top: 0; margin-bottom: 16px; }
+        h5 { margin: 0 0 12px 0; font-size: 16px; }
+        textarea, input[type="text"], select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        textarea { resize: vertical; }
+        .button-primary {
+            width: 100%; padding: 12px; font-size: 18px; font-weight: bold;
+            color: #fff; border: none; border-radius: 6px; cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+        }
+        .button-primary:active { transform: scale(0.99); }
+        
+        #step1 .button-primary { background: linear-gradient(135deg, #339af0, var(--color-step1)); }
+        #step1 .button-primary:hover { background: linear-gradient(135deg, var(--color-step1), #1971c2); }
+        #step2 .button-primary { background: linear-gradient(135deg, #ff922b, var(--color-step2)); }
+        #step2 .button-primary:hover { background: linear-gradient(135deg, var(--color-step2), #f76707); }
+        #step3 .button-primary { background: linear-gradient(135deg, #51cf66, var(--color-step3)); }
+        #step3 .button-primary:hover { background: linear-gradient(135deg, var(--color-step3), #2b8a3e); }
+        #step4 .button-primary { background: linear-gradient(135deg, #9775fa, var(--color-step4)); }
+        #step4 .button-primary:hover { background: linear-gradient(135deg, var(--color-step4), #5f3dc4); }
+
+        /* --- 각 단계별 세부 스타일 --- */
+        
+        /* 단계 1: 토큰화/임베딩 */
+        .tokenization-controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .tokenization-mode { display: flex; gap: 10px; }
+        .tokenization-mode button { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #fff; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .tokenization-mode button.active { background-color: var(--color-step1); color: #fff; border-color: var(--color-step1); font-weight: bold; }
+        .token-container { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border: 1px dashed #b0b3b8; border-radius: 6px; background-color: #fff; margin-bottom: 12px; }
+        .token { background-color: #e7f5ff; color: var(--color-step1); padding: 4px 8px; border-radius: 4px; font-weight: 500; white-space: pre; }
+        .embedding-container { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-family: 'Courier New', Courier, monospace; }
+        .embedding-row { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 4px; }
+        .embedding-row:nth-child(odd) { background-color: #f8f9fa; }
+        .embedding-token { font-weight: bold; min-width: 100px; text-align: right; }
+        .embedding-vector { color: #666; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .embedding-summary { display: flex; justify-content: space-around; background-color: #e9ecef; padding: 12px; border-radius: 6px; margin-top: 20px; text-align: center; }
+        .summary-item { font-size: 14px; }
+        .summary-item strong { display: block; font-size: 18px; color: var(--color-step1); }
+        .help-section { border-top: 2px solid var(--color-border); padding-top: 20px; margin-top: 24px; }
+        .help-section h4 { color: var(--color-step1); }
+        
+        /* 단계 2: 파라미터 실험실 */
+        .parameter-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px; }
+        .param-label { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 8px; }
+        .param-value { font-weight: bold; color: var(--color-step2); background-color: #fff4e6; padding: 2px 8px; border-radius: 4px; }
+        input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; background: #e9ecef; border-radius: 5px; outline: none; cursor: pointer; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #step2 input[type="range"]::-webkit-slider-thumb { background-color: var(--color-step2); }
+        .param-hint { font-size: 13px; color: var(--color-text-secondary); margin-top: 6px; }
+        .output-box { border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; min-height: 200px; background-color: #fff; border-left: 4px solid var(--color-step2); }
+
+        /* 단계 3: 프롬프트 엔지니어링 */
+        .prompt-engineering-workspace { display: flex; gap: 24px; flex-wrap: wrap; }
+        .prompt-builder, .prompt-results { flex: 1; min-width: 400px; }
+        .prompt-block { margin-bottom: 16px; border: 1px solid var(--color-border); padding: 20px; border-radius: 8px; background-color: var(--color-bg-light); }
+        .prompt-block h5 { margin: 0 0 12px 0; color: var(--color-step3); }
+        .prompt-block label { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: block;}
+        .result-box { background-color: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; min-height: 250px; overflow-y: auto; font-size: 15px; line-height: 1.6; white-space: pre-wrap;}
+        #final-prompt-box { font-family: 'Courier New', Courier, monospace; background-color: #e6fcf5; color: #087f5b; }
+        
+        /* 단계 4: 파인튜닝 */
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; }
+        .btn-upload { border: 2px solid var(--color-step4); color: var(--color-step4); background-color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .file-input-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+        .btn-start-tuning { border: none; color: #fff; background: linear-gradient(135deg, #9775fa, var(--color-step4)); padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-start-tuning:disabled { background: #adb5bd; cursor: not-allowed; }
+        .progress-bar { width: 100%; height: 12px; background-color: #e9ecef; border-radius: 6px; overflow: hidden; margin-top: 8px; }
+        .progress { width: 0%; height: 100%; background-color: var(--color-step4); border-radius: 6px; transition: width 0.5s ease-in-out; }
+        .comparison-section.disabled { opacity: 0.5; pointer-events: none; }
+        .comparison-workspace { display: flex; gap: 24px; margin-top: 16px; }
+        .chat-box { flex: 1; border: 1px solid var(--color-border); border-radius: 8px; background-color: #fff; padding: 20px; display: flex; flex-direction: column; }
+        #tuned-model-chat { border-top: 4px solid var(--color-step4); }
+        #tuned-model-chat h5 { color: var(--color-step4); }
+        .chat-history { flex-grow: 1; height: 300px; overflow-y: auto; padding: 10px; }
+        .chat-input-area { display: flex; gap: 10px; margin-top: 16px; }
+        #question-input { flex-grow: 1; }
+        #ask-button { border: none; color: #fff; background-color: var(--color-step4); padding: 0 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <nav class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'step1')">1단계: 토큰화/임베딩</button>
+            <button class="tab-button" onclick="openTab(event, 'step2')">2단계: 파라미터 실험실</button>
+            <button class="tab-button" onclick="openTab(event, 'step3')">3단계: 프롬프트 엔지니어링</button>
+            <button class="tab-button" onclick="openTab(event, 'step4')">4단계: 파인튜닝</button>
+        </nav>
+
+        <div class="tab-content">
+            <!-- ======================= 1단계: 토큰화/임베딩 (수정됨) ======================= -->
+            <div id="step1" class="content-pane active">
+                <h1>토큰화(Tokenization)와 임베딩(Embedding)</h1>
+                <p class="description">AI가 우리의 언어를 어떻게 이해하는지 첫 단계를 체험해 보세요. 입력한 텍스트가 어떻게 컴퓨터가 이해하는 숫자로 변환되는지 직접 확인할 수 있습니다.</p>
+                <div class="section">
+                    <textarea placeholder="이곳에 분석할 텍스트를 입력하세요.">AI의 동작 원리를 체험하는 것은 즐겁다.</textarea>
+                    <div class="tokenization-controls">
+                        <label>토큰화 방식:</label>
+                        <div class="tokenization-mode">
+                            <button class="active">Subword (부분단어)</button>
+                            <button>Word (단어)</button>
+                            <button>Character (문자)</button>
+                        </div>
+                    </div>
+                    <button class="button-primary">분석하기 ▶️</button>
+                </div>
+                <div class="section">
+                    <h4>1. 토큰화 결과</h4>
+                    <div class="token-container">
+                        <span class="token">AI</span><span class="token">의</span><span class="token"> 동작</span><span class="token"> 원리</span><span class="token">를</span><span class="token"> 체험</span><span class="token">하는</span><span class="token"> 것은</span><span class="token"> 즐겁</span><span class="token">다</span><span class="token">.</span>
+                    </div>
+                    <hr>
+                    <h4>2. 임베딩 벡터 결과</h4>
+                    <div class="embedding-container">
+                        <div class="embedding-row"><span class="embedding-token">AI</span><span class="embedding-vector">[-0.0123, 0.0456, -0.0981, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">의</span><span class="embedding-vector">[0.0221, -0.0058, 0.1245, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">동작</span><span class="embedding-vector">[-0.0876, 0.0333, -0.0112, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">원리</span><span class="embedding-vector">[0.0543, -0.0765, 0.0432, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">를</span><span class="embedding-vector">[0.1023, 0.0110, -0.0557, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">체험</span><span class="embedding-vector">[-0.0345, 0.0667, 0.0889, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">하는</span><span class="embedding-vector">[0.0012, -0.0234, -0.0678, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">것은</span><span class="embedding-vector">[0.0456, 0.0789, 0.0123, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">즐겁</span><span class="embedding-vector">[-0.0987, -0.0654, 0.0321, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">다</span><span class="embedding-vector">[0.0555, 0.0444, -0.0333, ...]</span></div>
+                        <div class="embedding-row"><span class="embedding-token">.</span><span class="embedding-vector">[0.0111, -0.0222, 0.0001, ...]</span></div>
+                    </div>
+                    <div class="embedding-summary">
+                        <div class="summary-item"><strong>11개</strong> 총 토큰</div>
+                        <div class="summary-item"><strong>1536차원</strong> 벡터</div>
+                        <div class="summary-item"><strong>29자</strong> 원본 문자</div>
+                    </div>
+
+                    <div class="help-section">
+                        <h4>이해하기</h4>
+                        <p><strong>토큰화</strong>는 AI가 텍스트를 이해하기 위한 첫 번째 단계입니다. 긴 텍스트를 '토큰'이라는 작은 의미 단위로 나누어 컴퓨터가 처리할 수 있게 만듭니다.</p>
+                        <p><strong>임베딩</strong>은 각 토큰을 수치 벡터(숫자의 배열)로 변환하는 과정입니다. 비슷한 의미의 단어들은 벡터 공간에서 가까운 위치에 놓이게 되어, AI가 단어 간의 의미 관계를 수학적으로 계산할 수 있습니다.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======================= 2단계: 파라미터 실험실 (수정됨) ======================= -->
+            <div id="step2" class="content-pane">
+                <h1>파라미터 실험실 (답변 다양성 실습)</h1>
+                <p class="description">AI의 답변 스타일을 결정하는 주요 파라미터를 직접 조절해 보세요. 같은 질문에도 파라미터 값에 따라 어떻게 다른 답변이 생성되는지 확인할 수 있습니다.</p>
+                <div class="section">
+                    <textarea id="prompt-input-step2" placeholder="AI에게 할 질문이나 명령을 입력하세요.">우주여행에 대한 짧은 시를 써줘.</textarea>
+                    <div class="parameter-controls">
+                        <!-- Temperature -->
+                        <div class="param-control">
+                            <label class="param-label" for="temperature"><span>Temperature (창의성)</span><span class="param-value" id="temperature-value">0.7</span></label>
+                            <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                            <p class="param-hint">높을수록 창의적이고 다양한 답변을 생성합니다.</p>
+                        </div>
+                        <!-- Top P -->
+                        <div class="param-control">
+                            <label class="param-label" for="top_p"><span>Top P (확실성)</span><span class="param-value" id="top_p-value">1.0</span></label>
+                            <input type="range" id="top_p" min="0" max="1" step="0.05" value="1.0">
+                            <p class="param-hint">고려할 단어 후보의 범위를 조절해 정확성을 높입니다.</p>
+                        </div>
+                        <!-- Frequency Penalty -->
+                        <div class="param-control">
+                            <label class="param-label" for="frequency_penalty"><span>Frequency Penalty (단어 반복)</span><span class="param-value" id="frequency_penalty-value">0.0</span></label>
+                            <input type="range" id="frequency_penalty" min="-2" max="2" step="0.1" value="0">
+                            <p class="param-hint">높을수록 동일한 단어의 반복 사용을 억제합니다.</p>
+                        </div>
+                        <!-- Presence Penalty -->
+                        <div class="param-control">
+                             <label class="param-label" for="presence_penalty"><span>Presence Penalty (주제 반복)</span><span class="param-value" id="presence_penalty-value">0.0</span></label>
+                            <input type="range" id="presence_penalty" min="-2" max="2" step="0.1" value="0">
+                            <p class="param-hint">높을수록 새로운 주제로의 전환을 유도합니다.</p>
+                        </div>
+                    </div>
+                    <button class="button-primary">답변 생성하기 🪄</button>
+                </div>
+                <div class="output-box">
+                    <h5>AI 생성 결과</h5>
+                    <p><em>[생성 버튼을 누르면 AI의 답변이 여기에 표시됩니다.]</em></p>
+                </div>
+            </div>
+
+            <!-- ======================= 3단계: 프롬프트 엔지니어링 (수정됨) ======================= -->
+            <div id="step3" class="content-pane">
+                <h1>프롬프트 엔지니어링</h1>
+                <p class="description">원하는 답변을 얻기 위해 AI에게 명확하고 효과적으로 지시하는 방법을 배워봅니다. 다양한 '블록'을 조합하여 최적의 프롬프트를 직접 만들어 보세요.</p>
+                <div class="prompt-engineering-workspace">
+                    <div class="prompt-builder">
+                        <h4>프롬프트 조립소 🧩</h4>
+                        <div class="prompt-block">
+                            <h5>역할/대상 지정 블록</h5>
+                            <input type="text" id="pr-role" placeholder="AI의 역할 (예: 친절한 과학 선생님)">
+                            <input type="text" id="pr-audience" placeholder="답변을 들을 대상 (예: 10살 어린이)">
+                        </div>
+                        <div class="prompt-block">
+                            <h5>형식 지정 블록</h5>
+                            <select id="pr-format">
+                                <option value="">-- 형식 선택 --</option>
+                                <option value="표 형식으로">표</option>
+                                <option value="목록 (bullet points) 형식으로">목록</option>
+                                <option value="블로그 게시물 형식으로">블로그</option>
+                                <option value="뉴스 기사 형식으로">뉴스기사</option>
+                                <option value="코드 형식으로">코드</option>
+                                <option value="요약 형식으로">요약</option>
+                                <option value="비교 설명 형식으로">비교설명</option>
+                                <option value="Q&A 형식으로">Q&A</option>
+                            </select>
+                        </div>
+                        <!-- ======================= 예시 지정 블록 추가 ======================= -->
+                        <div class="prompt-block">
+                            <h5>예시 지정 블록 (Few-shot)</h5>
+                            <label for="pr-single-example">단일 예시 (One-shot)</label>
+                            <textarea id="pr-single-example" rows="3" placeholder="AI에게 제공할 답변의 모범 예시를 입력하세요. 
+예: 질문: 한국의 수도는 어디야? 
+답변: 대한민국의 수도는 서울입니다."></textarea>
+                            <label for="pr-multi-example">복수 예시 (Few-shot)</label>
+                            <textarea id="pr-multi-example" rows="5" placeholder="입력과 출력 쌍을 명확하게 구분하여 여러 예시를 제공하세요. 
+예시1)
+입력: 사과를 영어로 뭐야?
+출력: Apple
+
+예시2)
+입력: 사랑을 영어로 뭐야?
+출력: Love"></textarea>
+                        </div>
+                        <!-- ================================================================= -->
+                        <div class="prompt-block">
+                            <h5>조건 추가 블록</h5>
+                            <input type="text" id="pr-include" placeholder="반드시 포함할 내용 (예: 3가지 근거 포함)">
+                            <input type="text" id="pr-exclude" placeholder="금지할 내용 (예: 전문 용어 사용 금지)">
+                            <input type="text" id="pr-length" placeholder="출력 길이 (예: 200자 이내)">
+                        </div>
+                        <div class="prompt-block">
+                            <h5>심화 추론 블록</h5>
+                            <label><input type="checkbox" id="pr-cot"> 단계적 추론 (CoT) 활성화</label>
+                            <label><input type="checkbox" id="pr-rag"> 자료 근거 추론 (RAG) 활성화</label>
+                        </div>
+                    </div>
+                    <div class="prompt-results">
+                        <h4>최종 생성 프롬프트 📝</h4>
+                        <div class="result-box" id="final-prompt-box"><pre># 질문
+달이 밤에 빛나는 이유는 뭐야?</pre></div>
+                        <h4>AI 생성 결과 🤖</h4>
+                        <div class="result-box">[실행하기 버튼을 누르면 AI 답변이 여기에 표시됩니다.]</div>
+                    </div>
+                </div>
+                <button class="button-primary" style="margin-top: 20px;">프롬프트 실행하기 🚀</button>
+            </div>
+            
+            <!-- ======================= 4단계: 파인튜닝 ======================= -->
+            <div id="step4" class="content-pane">
+                <h1>성능 개선 (파인튜닝)</h1>
+                <p class="description">AI에게 특정 지식을 학습시켜 나만의 전문 AI를 만들어 봅니다. 로컬 파일을 업로드하여, 파일 내용을 기반으로 답변 성능이 어떻게 향상되는지 직접 확인해 보세요.</p>
+                
+                <div class="section">
+                    <h4>1. 최종 생성 프롬프트</h4>
+                    <div class="result-box" style="min-height: 150px;">
+                        <pre>[업로드된 파일과 지시문을 바탕으로 구성된 최종 프롬프트가 표시됩니다.]</pre>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h4>2. 나만의 학습 데이터 업로드</h4>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div class="file-input-wrapper">
+                            <button class="btn-upload">📤 파일 선택</button>
+                            <input type="file" id="file-upload">
+                        </div>
+                        <span id="file-name">선택된 파일 없음</span>
+                        <button class="btn-start-tuning" id="start-tuning-btn" disabled>파인튜닝 시작하기</button>
+                    </div>
+                    <div id="tuning-status" style="display: none; margin-top: 20px;">
+                        <p id="status-text"></p>
+                        <div class="progress-bar"><div class="progress" id="progress-bar-inner"></div></div>
+                    </div>
+                </div>
+
+                <div class="section comparison-section disabled" id="comparison-section">
+                    <h4>3. 결과 보기</h4>
+                    <div class="comparison-workspace">
+                        <div class="chat-box" id="tuned-model-chat">
+                            <h5>✨ 파인튜닝 모델 결과</h5>
+                            <div class="chat-history">
+                                <p><em>[파인튜닝이 완료되면 학습된 데이터를 기반으로 생성된 답변이 여기에 표시됩니다.]</em></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ======================= 공통: 탭 기능 =======================
+    function openTab(evt, tabName) {
+        let i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("content-pane");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tab-button");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+
+    // 초기화 시 첫 번째 탭 활성화
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelector('.tab-button').click();
+    });
+    
+    // ======================= 1단계: 토큰화 방식 버튼 =======================
+    const tokenModeButtons = document.querySelectorAll('.tokenization-mode button');
+    tokenModeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            tokenModeButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+        });
+    });
+
+
+    // ======================= 2단계: 파라미터 슬라이더 값 표시 =======================
+    const sliders = document.querySelectorAll('input[type="range"]');
+    sliders.forEach(slider => {
+        const valueSpan = document.getElementById(`${slider.id}-value`);
+        if (valueSpan) {
+            valueSpan.textContent = slider.value;
+            slider.addEventListener('input', (event) => {
+                valueSpan.textContent = event.target.value;
+            });
+        }
+    });
+
+    // ======================= 3단계: 프롬프트 자동 생성 (수정됨) =======================
+    const promptInputs = document.querySelectorAll('#step3 .prompt-builder input, #step3 .prompt-builder select, #step3 .prompt-builder textarea');
+    const finalPromptBox = document.getElementById('final-prompt-box');
+
+    function updateFinalPrompt() {
+        let finalPrompt = "";
+        const role = document.getElementById('pr-role').value;
+        const audience = document.getElementById('pr-audience').value;
+        const format = document.getElementById('pr-format').value;
+        const singleExample = document.getElementById('pr-single-example').value;
+        const multiExample = document.getElementById('pr-multi-example').value;
+        const include = document.getElementById('pr-include').value;
+        const exclude = document.getElementById('pr-exclude').value;
+        const length = document.getElementById('pr-length').value;
+        const cot = document.getElementById('pr-cot').checked;
+        
+        let instructions = [];
+        if (role) instructions.push(`너는 이제부터 '${role}'이야.`);
+        if (audience) instructions.push(`'${audience}'를 대상으로 답변해야 해.`);
+        if (format) instructions.push(`답변은 '${format}' 형식이어야 해.`);
+
+        if(instructions.length > 0) {
+            finalPrompt += "# 지시문\n" + instructions.join("\n") + "\n\n";
+        }
+
+        let examples = [];
+        if (singleExample) examples.push(singleExample);
+        if (multiExample) examples.push(multiExample);
+
+        if(examples.length > 0) {
+            finalPrompt += "# 예시\n" + examples.join("\n\n") + "\n\n";
+        }
+
+        let conditions = [];
+        if (include) conditions.push(`- 반드시 '${include}' 내용을 포함해야 해.`);
+        if (exclude) conditions.push(`- '${exclude}' 내용은 절대 포함하면 안 돼.`);
+        if (length) conditions.push(`- 답변은 반드시 ${length}로 작성해야 해.`);
+        if (cot) conditions.push(`- 단계적으로 생각해서 답변해. (CoT 활성화)`);
+        
+        if(conditions.length > 0) {
+            finalPrompt += "# 조건\n" + conditions.join("\n") + "\n\n";
+        }
+
+        finalPrompt += "# 질문\n[여기에 사용자의 실제 질문이 들어갑니다]";
+
+        finalPromptBox.textContent = finalPrompt;
+    }
+
+    promptInputs.forEach(input => input.addEventListener('input', updateFinalPrompt));
+    updateFinalPrompt(); // 초기 로드 시 실행
+
+    // ======================= 4단계: 파인튜닝 시뮬레이션 =======================
+    const fileUpload = document.getElementById('file-upload');
+    const fileNameSpan = document.getElementById('file-name');
+    const startTuningBtn = document.getElementById('start-tuning-btn');
+    const comparisonSection = document.getElementById('comparison-section');
+    const tuningStatusDiv = document.getElementById('tuning-status');
+    const statusText = document.getElementById('status-text');
+    const progressBar = document.getElementById('progress-bar-inner');
+
+    fileUpload.addEventListener('change', () => {
+        if (fileUpload.files.length > 0) {
+            fileNameSpan.textContent = fileUpload.files[0].name;
+            startTuningBtn.disabled = false;
+        }
+    });
+
+    startTuningBtn.addEventListener('click', () => {
+        startTuningBtn.disabled = true;
+        tuningStatusDiv.style.display = 'block';
+        
+        statusText.textContent = `상태: '${fileNameSpan.textContent}' 파일 분석 및 학습 준비 중...`;
+        progressBar.style.width = '25%';
+
+        setTimeout(() => {
+            statusText.textContent = `상태: 모델 파인튜닝 진행 중... (1/2)`;
+            progressBar.style.width = '50%';
+        }, 1500);
+        setTimeout(() => {
+            statusText.textContent = `상태: 모델 파인튜닝 진행 중... (2/2)`;
+            progressBar.style.width = '75%';
+        }, 3000);
+        setTimeout(() => {
+            statusText.textContent = `상태: 학습 완료! 아래에서 결과를 확인해보세요.`;
+            progressBar.style.width = '100%';
+            comparisonSection.classList.remove('disabled');
+        }, 4500);
+    });
+
+    </script>
+</body>
+</html>
